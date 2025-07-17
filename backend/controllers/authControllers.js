@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const sendOTP = require("../utils/sendOtp.js");
 const resendOtp = require("../utils/resendOtp.js");
 const jwt = require("jsonwebtoken");
+const resetPassword = require("../utils/resetPassword.js");
 exports.register = async (req, res) => {
   const { name, email, password, phoneNumber, role } = req.body;
 
@@ -212,5 +213,74 @@ exports.resendOtp = async (req, res) => {
   } catch (error) {
     console.error("Resend OTP error:", error);
     res.status(500).json({ message: "Something went wrong" });
+  }
+};
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required." });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    user.otp = otp;
+    user.otpExpiresAt = expiresAt;
+    await user.save();
+
+    await resetPassword(user.email, otp, user.name);
+
+    return res.status(200).json({ message: "OTP sent to your email." });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    return res.status(500).json({ message: "Something went wrong." });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const isOtpValid = user.otp === otp;
+    const isOtpExpired = user.otpExpiresAt < new Date();
+
+    if (!isOtpValid) {
+      return res.status(400).json({ message: "Invalid OTP." });
+    }
+
+    if (isOtpExpired) {
+      return res.status(410).json({ message: "OTP has expired." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+
+    user.otp = null;
+    user.otpExpiresAt = null;
+
+    await user.save();
+
+    return res.status(200).json({ message: "Password reset successful." });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    return res.status(500).json({ message: "Something went wrong." });
   }
 };
