@@ -118,6 +118,13 @@ const listingSchema = new mongoose.Schema(
     },
     description: { type: String, required: true },
 
+    // Landlord living status
+    landlordLivesInCompound: {
+      type: Boolean,
+      default: false,
+      required: true,
+    },
+
     // Media
     images: [photoSchema], // Assuming photoSchema is defined elsewhere
     photoNotes: { type: String },
@@ -201,6 +208,7 @@ listingSchema.index({ rentAmount: 1 });
 listingSchema.index({ "creator.id": 1 });
 listingSchema.index({ status: 1 });
 listingSchema.index({ inviteAgentToBid: 1 });
+listingSchema.index({ landlordLivesInCompound: 1 }); // New index
 listingSchema.index({ createdAt: -1 });
 
 // Pre-save middleware to handle agent invitation logic

@@ -28,6 +28,7 @@ exports.createListing = async (req, res) => {
       photoNotes,
       inviteAgentToBid,
       agentInviteDetails,
+      landlordLivesInCompound, // New field
     } = req.body;
 
     const { id: userId, role } = req.user; // assume user object = { id, role }
@@ -63,6 +64,7 @@ exports.createListing = async (req, res) => {
       description,
       images,
       photoNotes,
+      landlordLivesInCompound: landlordLivesInCompound ?? false, // Add with default false
     };
 
     // Only landlords can set `inviteAgentToBid` and related details
@@ -132,6 +134,7 @@ exports.getListings = async (req, res) => {
       bedrooms,
       bathrooms,
       inviteAgentToBid,
+      landlordLivesInCompound, // New filter parameter
       page = 1,
       limit = 10,
       sort = "-createdAt",
@@ -147,6 +150,11 @@ exports.getListings = async (req, res) => {
     if (bedrooms) filter.bedrooms = Number(bedrooms);
     if (bathrooms) filter.bathrooms = Number(bathrooms);
     if (inviteAgentToBid) filter.inviteAgentToBid = inviteAgentToBid === "true";
+
+    // Add landlordLivesInCompound filter
+    if (landlordLivesInCompound !== undefined) {
+      filter.landlordLivesInCompound = landlordLivesInCompound === "true";
+    }
 
     // Price range filter
     if (minRent || maxRent) {
@@ -182,7 +190,6 @@ exports.getListings = async (req, res) => {
     res.status(500).json({ message: "Failed to get listings" });
   }
 };
-
 // @desc    Submit agent bid for a listing
 // @route   POST /api/listings/:id/bids
 // @access  Private (Agent only)
