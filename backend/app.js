@@ -23,6 +23,7 @@ app.get("/test", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/listings", listingRoutes);
+app.use("/api/listing", listingRoutes);
 app.use("/api/media", uploadRoutes);
 
 app.listen(4000);

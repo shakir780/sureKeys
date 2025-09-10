@@ -1,5 +1,32 @@
 const mongoose = require("mongoose");
 
+const videoLinkSchema = new mongoose.Schema(
+  {
+    url: {
+      type: String,
+      required: true,
+    },
+    platform: {
+      type: String,
+      enum: [
+        "youtube",
+        "tiktok",
+        "facebook",
+        "instagram",
+        "vimeo",
+        "twitter",
+        "linkedin",
+        "other",
+      ],
+      default: "other",
+    },
+    title: {
+      type: String,
+      default: "",
+    },
+  },
+  { _id: false }
+);
 // Agent invitation details sub-schema
 const agentInviteDetailsSchema = new mongoose.Schema(
   {
@@ -128,6 +155,7 @@ const listingSchema = new mongoose.Schema(
     // Media
     images: [photoSchema], // Assuming photoSchema is defined elsewhere
     photoNotes: { type: String },
+    videoLinks: [videoLinkSchema],
 
     // Agent invitation system
     inviteAgentToBid: { type: Boolean, default: false },

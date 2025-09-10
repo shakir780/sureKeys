@@ -1,5 +1,9 @@
 const Listing = require("../models/Listing.js");
 const User = require("../models/User.js"); // Assuming you have a User model
+const {
+  isValidUrl,
+  detectVideoPlatform,
+} = require("../utils/detectVideoPlatform.js");
 
 // @desc    Create new listing (landlord or agent)
 // @route   POST /api/listings
@@ -26,18 +30,50 @@ exports.createListing = async (req, res) => {
       description,
       images,
       photoNotes,
+      videoLinks, // New field for video links
       inviteAgentToBid,
       agentInviteDetails,
-      landlordLivesInCompound, // New field
+      landlordLivesInCompound,
     } = req.body;
 
-    const { id: userId, role } = req.user; // assume user object = { id, role }
+    const { id: userId, role } = req.user;
 
     // Parse rentAmount to handle formatted currency
     const parsedRentAmount =
       typeof rentAmount === "string"
         ? parseFloat(rentAmount.replace(/[^\d.]/g, ""))
         : Number(rentAmount);
+
+    // Process and validate video links
+    const processedVideoLinks = [];
+    if (videoLinks && Array.isArray(videoLinks)) {
+      for (const link of videoLinks) {
+        if (typeof link === "string" && link.trim()) {
+          const cleanLink = link.trim();
+
+          // Basic URL validation
+          if (isValidUrl(cleanLink)) {
+            const videoInfo = {
+              url: cleanLink,
+              platform: detectVideoPlatform(cleanLink),
+              title: link.title || "", // Optional title from frontend
+            };
+            processedVideoLinks.push(videoInfo);
+          }
+        } else if (typeof link === "object" && link.url) {
+          // Handle object format: { url: 'link', title: 'optional title' }
+          const cleanUrl = link.url.trim();
+          if (isValidUrl(cleanUrl)) {
+            const videoInfo = {
+              url: cleanUrl,
+              platform: detectVideoPlatform(cleanUrl),
+              title: link.title || "",
+            };
+            processedVideoLinks.push(videoInfo);
+          }
+        }
+      }
+    }
 
     // Basic listing data
     const listingData = {
@@ -64,7 +100,8 @@ exports.createListing = async (req, res) => {
       description,
       images,
       photoNotes,
-      landlordLivesInCompound: landlordLivesInCompound ?? false, // Add with default false
+      videoLinks: processedVideoLinks, // Add processed video links
+      landlordLivesInCompound: landlordLivesInCompound ?? false,
     };
 
     // Only landlords can set `inviteAgentToBid` and related details
@@ -118,6 +155,8 @@ exports.createListing = async (req, res) => {
     res.status(500).json({ message: "Failed to create listing" });
   }
 };
+
+// Helper function to validate URLs
 
 // @desc    Get listings with optional filters
 // @route   GET /api/listings
@@ -190,6 +229,71 @@ exports.getListings = async (req, res) => {
     res.status(500).json({ message: "Failed to get listings" });
   }
 };
+
+// @desc    Get single listing by ID
+// @route   GET /api/listings/:id
+// @access  Public
+exports.getListingById = async (req, res) => {
+  try {
+    const { id: listingId } = req.params;
+
+    // Find the listing and populate related data
+    const listing = await Listing.findById(listingId)
+      .populate("creator.id", "name email phone profilePicture")
+      .populate("selectedAgent.agentId", "name email phone profilePicture")
+      .populate({
+        path: "agentBids.agentId",
+        select: "name email phone profilePicture",
+      });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    // Check if listing is active (optional - you might want to show inactive listings to owners)
+    if (listing.status !== "active") {
+      // If there's a user in the request and they own the listing, show it anyway
+      if (
+        req.user &&
+        req.user.id.toString() === listing.creator.id._id.toString()
+      ) {
+        // Owner can see their own inactive listings
+      } else {
+        return res.status(404).json({ message: "Listing not available" });
+      }
+    }
+
+    // If there's a logged-in user, you might want to hide sensitive info for non-owners
+    let responseData = listing.toObject();
+
+    // Hide agent bids from non-owners (except the listing creator)
+    if (
+      !req.user ||
+      req.user.id.toString() !== listing.creator.id._id.toString()
+    ) {
+      if (responseData.agentBids) {
+        // Only show the count of bids, not the actual bid details
+        responseData.agentBidsCount = responseData.agentBids.length;
+        delete responseData.agentBids;
+      }
+    }
+
+    res.status(200).json({
+      message: "Listing retrieved successfully",
+      data: responseData,
+    });
+  } catch (error) {
+    console.error("Error getting listing by ID:", error);
+
+    // Handle invalid ObjectId
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid listing ID format" });
+    }
+
+    res.status(500).json({ message: "Failed to get listing" });
+  }
+};
+
 // @desc    Submit agent bid for a listing
 // @route   POST /api/listings/:id/bids
 // @access  Private (Agent only)
@@ -396,6 +500,7 @@ exports.getListingBids = async (req, res) => {
 // @route   PUT /api/listings/:id
 // @access  Private
 exports.updateListing = async (req, res) => {
+  console.log("called", req.user);
   try {
     const { id: listingId } = req.params;
     const { id: userId, role } = req.user;
